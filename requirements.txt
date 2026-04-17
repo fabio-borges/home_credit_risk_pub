@@ -3,4 +3,3 @@ pyarrow==18.1.0
 pandas==2.2.2
 scikit-learn
 xgboost
-shap

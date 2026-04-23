@@ -1,68 +1,76 @@
-# Home Credit Default Risk
+# Home Credit Default Risk — Experimental Machine Learning Workflow
 
-The goal of this project is to predict credit default risk for a loan/credit application. 
-The data I used is from the ["Home Credit Default Risk" 2018 Kaggle competition](https://www.kaggle.com/competitions/home-credit-default-risk/overview).
+This project implements an experimental machine learning workflow for predicting credit default risk using the ["Home Credit Default Risk" 2018 Kaggle competition](https://www.kaggle.com/competitions/home-credit-default-risk/overview). 
 
-The main aspects of this project are:
+The dataset consists of ~300,000 loan applications and six related historical tables containing up to 27 million records. The goal is to estimate the probability that an applicant will experience payment difficulties.
 
-* **Automated EDA**. There are about 200 columns distributed in 7 tables, making EDA automation desirable.
-* **Features Generated from Historical Data Aggregations**. There are 1-to-many relationships between the main, target-containing 
-table and historical ones. So I developed a mechanism of aggregating the historical data into single features.
-* **Feature Redundancy Elimination**. The historical data aggregation mechanism generated an initial pool of more than 6000
-features. Redundant features were eliminated by **Feature Clustering**.
-* **XGBoost Model**. 
-* **Feature Selection by Importance**. The features were ranked by importance (total gain) obtained from the initial 
-XGBoost model, with the top ranked ones being kept in the final model.
-* **Little Application of Domain Knowledge**. I'm not an expert in the field and the data documentation is scant. I think
-I would have engineered a better set of features if I had more access to domain knowledge. This is perhaps the main
-weakness of this project.
+The project focuses on large‑scale feature engineering, automated EDA, redundancy reduction, and modeling with XGBoost, implemented through modular Jupyter notebooks and Python modules.
 
-I didn't compete, since the competition is already closed. However, some Kaggle competitions, this one included, allow 
-"late submissions", meaning submissions done after the deadline that are scored privately, but not ranked. My best
-submission so far got a ROC AUC of 0.79227. For comparison, the winner score was 0.80570.
+## 1. Project Highlights
 
-*Note: the high percentage of HTML code in this repository is due to the automated EDA reports*
+#### Automated EDA for High‑Dimensional Data
+The dataset contains ~200 columns across 7 tables. To efficiently explore the data, I automated the EDA process using ydata_profiling, generating HTML reports for each table.
 
-## 1. The Task
+#### Large‑Scale Feature Engineering via Historical Aggregations
+The historical tables have 1‑to‑many relationships with the main application table. I developed a feature‑generation module that automatically creates:
 
-This is a binary classification problem.
+* Aggregations of numerical columns (min, mean, median, max)
+* Counts of categorical values
+* Cross‑aggregations between categorical and numerical columns
+* Time‑windowed aggregations (e.g., last 12 months)
 
-* Input: A loan/credit application.
-* Target: Probability of default. The target variable is defined as "1 - client with payment difficulties: he/she had late payment more than X days on at least one of the first Y installments of the loan in our sample, 0 - all other cases)
-".
-* Metric: ROC AUC
+This process initially produced ~16,000 features, later reduced to ~6,000 after removing near‑constant and high‑missingness features.
 
-## 2. The Data
+#### Feature Redundancy Elimination via Clustering
+To reduce redundancy among the engineered features, I applied Feature Clustering, reducing the feature set from ~6,000 to ~1,500 features.
+
+#### Modeling with XGBoost
+I used xgboost.XGBClassifier due to its support for:
+
+* Categorical features (enable_categorical=True)
+* Missing values
+* Class imbalance (scale_pos_weight)
+
+The target class is highly imbalanced (positive class ratio ≈ 0.08).
+
+#### Feature Selection Using Cross‑Validated Importance
+I trained an initial XGBoost model on the 1,620 features (1,500 engineered + 120 original).
+Using 5‑fold stratified cross‑validation, I averaged the total gain importance metric across folds and selected the top features.
+I then evaluated models using the top N features (100 to ~980, step 50), with the same CV settings.
+
+#### Model Performance
+A ROC AUC score of 0.79227 was achieved on the competition (late submission, as the competition is already closed). For comparison, the winning score was 0.80570.
+
+## 2. The Task
+
+* Problem type: Binary classification
+* Input: Loan/credit application + historical credit data
+* Target: Probability of default
+* Metric: ROC‑AUC
+
+The target is defined as:
+
+* 1 — client with payment difficulties (late payment > X days on at least one of the first Y installments)
+* 0 — all other cases
+
+## 3. The Data
 
 The data, along with a brief description and a relational diagram of all tables involved, can be found [here](https://www.kaggle.com/competitions/home-credit-default-risk/data).
 Additional domain information can be found in [this discussion post](https://www.kaggle.com/competitions/home-credit-default-risk/discussion/63032).
 
-I won't repeat here the information available on the competition's page, I'll just give an idea of the size of the dataset
-(please visit the links above for more information). The main table is the **Application** table, with about 300,000 rows and 120 columns, besides the ID. The train split
-also contains the **TARGET** binary variable, which is absent in the test split. The application table has 1-to-many
-relationships with other 6 tables. Those tables contain from about 1.5 million to 27 million rows, elevating the total number of
+The main table is the **Application** table, with about 300,000 rows and 120 columns, besides the ID. The train split
+also contains the **TARGET** binary variable, which is absent in the test split. 
+
+The application table has 1-to-many relationships with other 6 tables. Those tables contain from about 1.5 million to 27 million rows, elevating the total number of
 columns to about 200.
 
-## 3. The Approach
+The relational structure and the number of rows make this a multi‑table, high‑volume problem requiring careful feature engineering.
 
-Since the dataset is relatively large (300,000 examples), a high-capacity model seems to be a good choice, and
-I chose the xgboost.XGBClassifier model. This model has built-in support for categorical features, missing values and
-target class imbalances.
+## 4. The Approach
 
-For categorical feature support, I enabled it through the XGBoost *enable_categorical* parameter. For it to
-work I had to explicitly set the type of categorical columns to 'category' on the Pandas dataframes fed to
-the model. Of course that meant I didn't have to do any categorical feature encoding.  
+### 4.1 Exploratory Data Analysis
 
-I didn't do any data imputation for missing values, relying exclusively on XGBoost missing value
-support. 
-
-As for handling the strong target class imbalance, I used the XGBoost *scale_pos_weight* parameter, to
-give more sampling weight to positive examples.
-
-### 3.1 Exploratory Data Analysis
-
-Due to the high number of columns in this dataset, and my lack of domain knowledge, I decided to automate the EDA
-step. I used the [ydata_profiling](https://docs.profiling.ydata.ai/latest/) package. The EDA reports
+Generated profiling reports for each table using the [ydata_profiling](https://docs.profiling.ydata.ai/latest/) package. The EDA reports
 were generated by the [00_Preliminary_EDA.ipynp](notebooks/00_Preliminary_EDA.ipynb) notebook. Here are the links to the
 reports for each table: 
 * [application](https://fabio-borges.github.io/home_credit_risk_pub/eda_reports/application_train%20EDA%20Report.html)
@@ -73,90 +81,72 @@ reports for each table:
 * [installments_payments](https://fabio-borges.github.io/home_credit_risk_pub/eda_reports/installments_payments%20EDA%20Report.html)
 * [previous_application](https://fabio-borges.github.io/home_credit_risk_pub/eda_reports/previous_application%20EDA%20Report.html)
 
-#### 3.1.1 About Correlations
+Correlations were disabled when generating the reports, due to report size and performance constraints.
 
-I generated the ydata_profiling reports with the correlations disabled. For a dataset of this size,
-the reports with correlations were huge and very slow to visualize on the browser. Besides, my plan
-was to use feature importance (XGBoost's total gain) as the main criteria for feature selection, as
-a simple correlation value between a feature and the target doesn't capture interactions between
-features.
-
-As for pair-wise correlations between the features themselves, that would have been useful to
-eliminate redundant features. But for the effect I used Feature Clustering instead.
-
-#### 3.1.2 Target Class distribution
+#### Target Class distribution
 
 The **target positive class ratio** is **0.08**, so the target class is highly unbalanced. That stems 
 from the fact that most people pay their debts on time. More details about the target variable
 and other Application variables can be found on this report: [eda_reports](eda_reports)/application_train EDA Report.html.
 
-### 3.2 Feature Engineering
+### 4.2 Automated Feature Generation via Historical Aggregations
+For each historical table:
 
-#### 3.2.1 Historical Data Aggregation
+* Categorical columns: Count of each category
+* Numerical columns: min, mean, median, max
+* Cross‑aggregations: numerical stats conditioned on categorical values
+* Time‑windowed versions: e.g., last 12 months
 
-For historical data tables, the following aggregation features were generated automatically:
+Removed features with:
 
-* Categorical columns: 1 feature for each pair (column, categorical value), representing the 
-number of entries on the corresponding category. For example: CCB_STATUS_Active, from the credit card balance
-table, the number of records with STATUS='Active' for the application.
-* Numerical columns: 1 for each numerical column and for each operation on the set {min, mean, median, max}.
-For example: CCB_BALANCE_mean, from the credit card balance table, the mean BALANCE for the application.
-* Cross-aggregations between pairs (categorical column, numerical column). For example: CCB_BALANCE_mean_STATUS_Active,
-from the credit card balance table, the mean BALANCE for rows with STATUS='Active' for the application.
-These cross-aggregations were done for all possible combinations on all historical tables, except the previous_application
-table, in which case only one category was used in a cross-aggregation.
-* All the aggregations above were generated for different time frames as well. For example: CCB_**12**_BALANCE_mean_STATUS_Active,
-same as above, but restricted to the last 12 months.
+* 99% missing values in both classes
+* Variance < 1e‑4
 
-I developed a Python module specifically to generate all these aggregations, the [features.py](src/home_credit_risk/features.py)
-module. The entry point for feature generation is in this notebook: [01_Feature_Generation.ipynb](notebooks/01_Feature_Generation.ipynb).
+Result: ~6,000 features.
 
-This process would have generated an initial pool of about 16,000 features. Many of these features
-would be almost completely NaN values, or be almost constant. So features with more than 99% of
-missing values on both target classes, or a variance of less than 1e-4 for both, were discarded.
-So the initial pool of generated features have about 6,000 features.
- 
-#### 3.2.2 Redundant Feature Elimination
+Implemented in [features.py](src/home_credit_risk/features.py) and [01_Feature_Generation.ipynb](notebooks/01_Feature_Generation.ipynb).
 
-The initial pool of 6,000 generated features was reduced to 1,500 by eliminating "redundant"
-features via Feature Clustering. Code on this notebook: [02_Feature_Redundancy.ipynb](notebooks/02_Feature_Redundancy.ipynb)
+### 4.3 Redundant Feature Elimination
+Applied Feature Clustering to reduce ~6,000 features to ~1,500.
+Implemented in [02_Feature_Redundancy.ipynb](notebooks/02_Feature_Redundancy.ipynb).
 
-#### 3.2.3 Feature Selection
+### 4.4 Feature Selection
 
-An XGBClassifier model was cross-validated, using the initial 1,620 features (1,500 generated features, plus 120 features
-corresponding to the columns on the application table). The cross-validation was stratified on the target, had 5 folds and
-the roc_auc metric was used for scoring. The total gain importance metric was averaged over the cv folds and used as criteria 
-to select the top features.
-
-Next the model was cross-validated using the top N features, for N between 100 and the number of 
-features with non-zero importance (about 980), with an increment of 50 between trials. During
-each trial, the model was also fitted to the full training set (with the top N features), and that
-model was used to generate a submission file containing the predictions on the test set.
+* xgboost.XGBClassifier model cross-validated using the initial 1,620 features (1,500 generated features, plus 120 features
+corresponding to the columns on the application table).
+* 5-fold cross-validation stratified on the target
+* CV evaluation metric: ROC AUC
+* Total Gain Importance metric averaged over the cv folds and used as criteria to select the top features.
+* Model cross-validated again, but using the top N features, for $100 \le N \le ~980$, step size = 50.
 
 The best local CV roc_auc score was achieved with 800 features. However, the second-best model,
-with 600 features, was the one that actually achieved the best performance on the competition. 
+with 600 features, achieved the best performance on the competition. 
 
-This step is implemented here: [03_Feature_Selection.ipynb](notebooks/03_Feature_Selection.ipynb) and [modelling.py](src/home_credit_risk/learning.py).
+This step is implemented in [03_Feature_Selection.ipynb](notebooks/03_Feature_Selection.ipynb) and [modelling.py](src/home_credit_risk/learning.py).
 The notebook includes a visualization of the top 30 features by importance.
 
-## 4. Model Performance
+## 5. Results
 
-| Number of Features | Local CV score | Competition score |
-|--------------------|----------------|-------------------|
-| 600                | 0.79351        | 0.79227           |
-| 800                | 0.79358        | 0.79186           |
+Submission files were generated for different feature counts, using the test set (which does not contain the TARGET), and submitted to the competition (late submission, as the competition is already closed). The best competition score was achieved with 600 features:
 
-The performance achieved by the 600-feature model would have placed it in position 1500/7100 in
-the competition's final leaderboard, however the score wasn't much far from the winner's, which
-was 0.80570, as the scores were very close amongst competitors.
+| Number of Features | Local CV ROC AUC | Competition ROC AUC |
+|--------------------|------------------|---------------------|
+| 600                | 0.79351          | 0.79227             |
+| 800                | 0.79358          | 0.79186             |
 
-## 5. Further Steps.
 
-In this section I describe what I would like to have done, but haven't had the time to do it yet.
+That would place the model around 1800 / 7100 on the final leaderboard.
+The winning score was 0.80570, and scores were tightly clustered.
 
-1. More detailed model performance analysis, with a ROC AUC and precision-recall plots.
-2. Out-of-fold prediction analysis, to identify model weaknesses.
-3. A SHAP visualization of feature importance.
-4. Some visualizations on the most important features.
-5. Try other methods of feature selection, like scikit learn FeatureAgglomeration.
-6. Research online on consumer credit risk, to engineer a better set of features.
+## 6. Future Work
+Planned improvements:
+
+* ROC‑AUC and precision‑recall curve analysis
+* Out‑of‑fold prediction diagnostics
+* SHAP‑based feature importance
+* Visualizations of top features
+* Alternative feature selection methods (e.g., FeatureAgglomeration)
+* Domain‑informed feature engineering based on credit‑risk literature
+
+## 7. License
+This project is released under the MIT License.
